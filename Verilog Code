@@ -1,0 +1,102 @@
+module digital_stopwatch #(
+    parameter CLK_FREQ = 50_000_000
+)(
+    input  wire clk,
+    input  wire start,
+    input  wire stop,
+    input  wire reset,
+    input  wire lap,
+    output wire [2:0] timer_out
+);
+    // 1-second clock enable
+    reg [31:0] clk_count;
+    reg tick;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            clk_count <= 0;
+            tick <= 0;
+        end
+        else if (clk_count >= CLK_FREQ - 1) begin
+            clk_count <= 0;
+            tick <= 1;
+        end
+        else begin
+            clk_count <= clk_count + 1;
+            tick <= 0;
+        end
+    end
+
+    // Button edge detection
+    reg start_d, stop_d, lap_d;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            start_d <= 0;
+            stop_d  <= 0;
+            lap_d   <= 0;
+        end
+        else begin
+            start_d <= start;
+            stop_d  <= stop;
+            lap_d   <= lap;
+        end
+    end
+
+    wire start_press = start & ~start_d;
+    wire stop_press  = stop  & ~stop_d;
+    wire lap_press   = lap   & ~lap_d;
+
+    // Stopwatch control
+    reg running;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            running <= 0;
+        else if (start_press)
+            running <= 1;
+        else if (stop_press)
+            running <= 0;
+    end
+
+    // Elapsed time in seconds: 0 to 59
+    reg [5:0] seconds;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            seconds <= 0;
+        else if (running && tick) begin
+            if (seconds == 59)
+                seconds <= 0;
+            else
+                seconds <= seconds + 1'b1;
+        end
+    end
+
+    // Lap storage and display selection
+    reg [5:0] lap_seconds;
+    reg show_lap;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            lap_seconds <= 0;
+            show_lap <= 0;
+        end
+        else if (lap_press) begin
+            if (!show_lap) begin
+                lap_seconds <= seconds;
+                show_lap <= 1;
+            end
+            else begin
+                show_lap <= 0;
+            end
+        end
+    end
+
+    // Three output pins show binary value
+    // LAP press: capture and display lap value
+    // Next LAP press: return to running time
+    assign timer_out =
+        show_lap ? lap_seconds[2:0] : seconds[2:0];
+
+endmodule
